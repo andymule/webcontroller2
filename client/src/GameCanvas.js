@@ -22,10 +22,26 @@ const GameCanvas = ({ socket }) => {
         this.socket = data.socket;
       }
       preload() {
-        // Create a white ball texture so that tinting works correctly.
+        // Create a ball texture with a creative aesthetic that shows front/back.
         const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0xffffff, 1); // Use white (0xffffff) instead of red.
+        // Draw the back of the ball (darker shade)
+        graphics.fillStyle(0x555555, 1);
         graphics.fillCircle(20, 20, 20);
+        // Draw the front half (lighter shade) to simulate a light source
+        graphics.fillStyle(0xdddddd, 1);
+        graphics.beginPath();
+        // Draw an arc from 45° to 225° (in radians) to represent the illuminated front.
+        graphics.arc(
+          20,
+          20,
+          20,
+          Phaser.Math.DegToRad(45),
+          Phaser.Math.DegToRad(225),
+          false
+        );
+        graphics.lineTo(20, 20);
+        graphics.closePath();
+        graphics.fillPath();
         graphics.generateTexture("ball", 40, 40);
       }
       create() {
@@ -44,8 +60,7 @@ const GameCanvas = ({ socket }) => {
         this.ball.setCollideWorldBounds(true);
         // Start with zero velocity.
         this.ball.setVelocity(0, 0);
-        // Apply gravity.
-        this.ball.body.setGravityY(300);
+        // Note: Gravity is disabled in the physics config, so we do not apply it here.
 
         // Draw a border rectangle for visualization.
         const graphics = this.add.graphics();
@@ -54,12 +69,15 @@ const GameCanvas = ({ socket }) => {
 
         // Attach socket listeners.
         if (this.socket) {
-          // Listen for "launch" events from the launcher.
-          this.socket.on("launch", (drag) => {
-            console.log("MainScene: received launch event:", drag);
-            this.applyImpulse(drag);
+          // Listen for continuous "launcherUpdate" events from the Move stick.
+          this.socket.on("launcherUpdate", (move) => {
+            // move contains dx and dy from the left stick movement.
+            // Apply a scaling factor (adjust as needed) and set the ball's velocity.
+            const factor = 5;
+            this.ball.setVelocity(move.dx * factor, move.dy * factor);
+            console.log("MainScene: launcherUpdate received:", move);
           });
-          // Listen for "changeColor" events from the launcher.
+          // Listen for "changeColor" events (triggered by the right stick).
           this.socket.on("changeColor", (color) => {
             console.log(
               "MainScene: received changeColor event. New color:",
@@ -75,13 +93,11 @@ const GameCanvas = ({ socket }) => {
       update() {
         // Additional game logic can be added here.
       }
+      /* 
+      // The launch impulse functionality is no longer used.
       applyImpulse(drag) {
         if (this.ball && this.ball.body) {
-          console.log(
-            "MainScene: Before launch, velocity:",
-            this.ball.body.velocity
-          );
-          // Use a scaling factor to determine impulse strength.
+          console.log("MainScene: Before launch, velocity:", this.ball.body.velocity);
           const factor = 5;
           const impulse = {
             x: -drag.dx * factor,
@@ -89,16 +105,12 @@ const GameCanvas = ({ socket }) => {
           };
           console.log("MainScene: Launching ball with impulse:", impulse);
           this.ball.setVelocity(impulse.x, impulse.y);
-          console.log(
-            "MainScene: After launch, velocity:",
-            this.ball.body.velocity
-          );
+          console.log("MainScene: After launch, velocity:", this.ball.body.velocity);
         } else {
-          console.warn(
-            "MainScene: applyImpulse called, but ball or its body is missing!"
-          );
+          console.warn("MainScene: applyImpulse called, but ball or its body is missing!");
         }
       }
+      */
       changeBallColor(color) {
         if (this.ball) {
           console.log("MainScene: Changing ball color to:", color);
@@ -121,7 +133,7 @@ const GameCanvas = ({ socket }) => {
       physics: {
         default: "arcade",
         arcade: {
-          gravity: { y: 300 },
+          gravity: { y: 0 }, // Disable gravity
           debug: false,
         },
       },

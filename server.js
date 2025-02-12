@@ -42,8 +42,10 @@ io.on("connection", (socket) => {
     io.emit("changeColor", color);
   });
 
+  // Updated: Broadcast launcherUpdate events so the game receives them.
   socket.on("launcherUpdate", (data) => {
     console.log("SERVER: Received launcherUpdate from", socket.id, ":", data);
+    io.emit("launcherUpdate", data);
   });
 
   socket.on("debug", (msg) => {
