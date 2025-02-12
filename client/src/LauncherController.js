@@ -31,35 +31,23 @@ const LauncherController = ({ socket }) => {
     return "#" + toHex(r) + toHex(g) + toHex(b);
   };
 
-  // Limit the left analog stick’s movement to within the allowed radius.
-  const leftDragBound = (pos) => {
-    const dx = pos.x - leftCenter.x;
-    const dy = pos.y - leftCenter.y;
+  // Helper: create a drag bound function for a given center.
+  const createDragBound = (center) => (pos) => {
+    const dx = pos.x - center.x;
+    const dy = pos.y - center.y;
     const distance = Math.sqrt(dx * dx + dy * dy);
     if (distance > allowedRadius) {
       const angle = Math.atan2(dy, dx);
       return {
-        x: leftCenter.x + allowedRadius * Math.cos(angle),
-        y: leftCenter.y + allowedRadius * Math.sin(angle),
+        x: center.x + allowedRadius * Math.cos(angle),
+        y: center.y + allowedRadius * Math.sin(angle),
       };
     }
     return pos;
   };
 
-  // Limit the right analog stick’s movement to within the allowed radius.
-  const rightDragBound = (pos) => {
-    const dx = pos.x - rightCenter.x;
-    const dy = pos.y - rightCenter.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
-    if (distance > allowedRadius) {
-      const angle = Math.atan2(dy, dx);
-      return {
-        x: rightCenter.x + allowedRadius * Math.cos(angle),
-        y: rightCenter.y + allowedRadius * Math.sin(angle),
-      };
-    }
-    return pos;
-  };
+  const leftDragBound = createDragBound(leftCenter);
+  const rightDragBound = createDragBound(rightCenter);
 
   // LEFT ANALOG STICK (Movement)
   // As the left stick is dragged, compute its displacement from the deadzone center
@@ -71,8 +59,7 @@ const LauncherController = ({ socket }) => {
     const dy = newPos.y - leftCenter.y;
     console.log(`Left Stick: dx: ${dx}, dy: ${dy}`);
     if (socket) {
-      // A scaling factor can be adjusted if needed.
-      const factor = 1;
+      const factor = 1; // scaling factor (adjust if needed)
       socket.emit("launcherUpdate", { dx: dx * factor, dy: dy * factor });
       socket.emit("debug", `Left Stick dragging: dx=${dx}, dy=${dy}`);
     }
@@ -92,7 +79,7 @@ const LauncherController = ({ socket }) => {
   const handleRightDragMove = (e) => {
     const newPos = e.target.position();
     setRightStickPos(newPos);
-    // Optionally, you can add visual feedback here.
+    // Optionally, add visual feedback.
   };
 
   const handleRightDragEnd = () => {
@@ -128,7 +115,6 @@ const LauncherController = ({ socket }) => {
         />
 
         {/* LEFT ANALOG STICK */}
-        {/* Outer circle indicating the deadzone boundary */}
         <Circle
           x={leftCenter.x}
           y={leftCenter.y}
@@ -137,7 +123,6 @@ const LauncherController = ({ socket }) => {
           strokeWidth={2}
           dash={[4, 4]}
         />
-        {/* Draggable inner circle */}
         <Circle
           x={leftStickPos.x}
           y={leftStickPos.y}
@@ -157,7 +142,6 @@ const LauncherController = ({ socket }) => {
         />
 
         {/* RIGHT ANALOG STICK */}
-        {/* Outer circle indicating the deadzone boundary */}
         <Circle
           x={rightCenter.x}
           y={rightCenter.y}
@@ -166,7 +150,6 @@ const LauncherController = ({ socket }) => {
           strokeWidth={2}
           dash={[4, 4]}
         />
-        {/* Draggable inner circle */}
         <Circle
           x={rightStickPos.x}
           y={rightStickPos.y}
