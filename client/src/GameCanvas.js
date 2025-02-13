@@ -1,3 +1,4 @@
+// client/src/GameCanvas.js
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
 
@@ -26,7 +27,14 @@ const GameCanvas = ({ socket }) => {
         graphics.fillCircle(20, 20, 20);
         graphics.fillStyle(0xdddddd, 1);
         graphics.beginPath();
-        graphics.arc(20, 20, 20, Phaser.Math.DegToRad(45), Phaser.Math.DegToRad(225), false);
+        graphics.arc(
+          20,
+          20,
+          20,
+          Phaser.Math.DegToRad(45),
+          Phaser.Math.DegToRad(225),
+          false
+        );
         graphics.lineTo(20, 20);
         graphics.closePath();
         graphics.fillPath();
@@ -43,7 +51,11 @@ const GameCanvas = ({ socket }) => {
         this.physics.world.setBounds(0, 0, this.scale.width, this.scale.height);
 
         // Create the ball at the center.
-        this.ball = this.physics.add.image(this.scale.width / 2, this.scale.height / 2, "ball");
+        this.ball = this.physics.add.image(
+          this.scale.width / 2,
+          this.scale.height / 2,
+          "ball"
+        );
         this.ball.setBounce(0.9);
         this.ball.setCollideWorldBounds(true);
         this.ball.setVelocity(0, 0);
@@ -56,8 +68,8 @@ const GameCanvas = ({ socket }) => {
         // Listen for movement events.
         if (this.socket) {
           this.socket.on("launcherUpdate", (move) => {
-            const factor = 5;
-            this.ball.setVelocity(move.dx * factor, move.dy * factor);
+            const movefactor = 250;
+            this.ball.setVelocity(move.dx * movefactor, move.dy * movefactor);
             console.log("MainScene: launcherUpdate received:", move);
           });
 
@@ -75,17 +87,27 @@ const GameCanvas = ({ socket }) => {
         // Additional game logic can be added here.
       }
       shootBullet(data) {
-        // data.dx, data.dy are normalized direction components.
-        const bulletSpeed = 400;
+        // data.dx, data.dy are normalized direction components from the controller.
+        const bulletSpeed = 400.0;
         // Create bullet at the ball's current position.
-        const bullet = this.physics.add.image(this.ball.x, this.ball.y, "bullet");
-        bullet.setVelocity(data.dx * bulletSpeed, data.dy * bulletSpeed);
-        // Set bullet to be destroyed after 1 second.
+        const bullet = this.physics.add.image(
+          this.ball.x,
+          this.ball.y,
+          "bullet"
+        );
+        // Get the current velocity of the ship.
+        const currentV = this.ball.body.velocity;
+        // Flip the direction (i.e. reverse the flick) and add ship's current velocity.
+        const bulletVx = currentV.x - data.dx * bulletSpeed;
+        const bulletVy = currentV.y - data.dy * bulletSpeed;
+        bullet.setVelocity(bulletVx, bulletVy);
+        console.log("MainScene: Bullet velocity:", bulletVx, bulletVy);
+        // Destroy the bullet after 1 second.
         this.time.addEvent({
           delay: 1000,
           callback: () => {
             bullet.destroy();
-          }
+          },
         });
       }
       changeBallColor(color) {
@@ -94,7 +116,9 @@ const GameCanvas = ({ socket }) => {
           const colorNum = parseInt(color.replace("#", ""), 16);
           this.ball.setTint(colorNum);
         } else {
-          console.warn("MainScene: changeBallColor called, but ball is missing!");
+          console.warn(
+            "MainScene: changeBallColor called, but ball is missing!"
+          );
         }
       }
     }
