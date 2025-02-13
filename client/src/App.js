@@ -1,4 +1,4 @@
-// App.js
+// client/src/App.js
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
 import GameCanvas from "./GameCanvas"; // Desktop game
@@ -24,9 +24,9 @@ const App = () => {
     return () => newSocket.disconnect();
   }, []);
 
+  // No header text now; just render the appropriate component.
   return (
-    <div style={{ textAlign: "center"}}>
-      <h1>{isMobile ? "Mobile Controller" : "Desktop Display"}</h1>
+    <div style={{ textAlign: "center", width: "100%", height: "100vh" }}>
       {isMobile ? (
         <PhaserMobileController socket={socket} />
       ) : (

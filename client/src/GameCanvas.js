@@ -48,6 +48,7 @@ const GameCanvas = ({ socket }) => {
       }
       create() {
         console.log("MainScene: create called");
+        // Use current window dimensions.
         this.physics.world.setBounds(0, 0, this.scale.width, this.scale.height);
 
         // Create the ball at the center.
@@ -97,7 +98,7 @@ const GameCanvas = ({ socket }) => {
         );
         // Get the current velocity of the ship.
         const currentV = this.ball.body.velocity;
-        // Flip the direction (i.e. reverse the flick) and add ship's current velocity.
+        // Flip the direction (reverse the flick) and add ship's current velocity.
         const bulletVx = currentV.x - data.dx * bulletSpeed;
         const bulletVy = currentV.y - data.dy * bulletSpeed;
         bullet.setVelocity(bulletVx, bulletVy);
@@ -126,8 +127,8 @@ const GameCanvas = ({ socket }) => {
     const config = {
       type: Phaser.AUTO,
       parent: "phaser-game",
-      width: 800,
-      height: 600,
+      width: window.innerWidth,
+      height: window.innerHeight,
       physics: {
         default: "arcade",
         arcade: {
@@ -136,10 +137,8 @@ const GameCanvas = ({ socket }) => {
         },
       },
       scale: {
-        mode: Phaser.Scale.FIT,
+        mode: Phaser.Scale.RESIZE,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: 800,
-        height: 600,
       },
       scene: MainScene,
     };
@@ -149,7 +148,16 @@ const GameCanvas = ({ socket }) => {
     console.log("GameCanvas: Starting MainScene with socket:", socket);
     gameRef.current.scene.start("MainScene", { socket: socket });
 
+    // Listen for window resize events.
+    const resizeListener = () => {
+      if (gameRef.current && gameRef.current.scale) {
+        gameRef.current.scale.resize(window.innerWidth, window.innerHeight);
+      }
+    };
+    window.addEventListener("resize", resizeListener);
+
     return () => {
+      window.removeEventListener("resize", resizeListener);
       if (gameRef.current) {
         console.log("GameCanvas: Destroying Phaser game instance");
         gameRef.current.destroy(true);
@@ -164,8 +172,8 @@ const GameCanvas = ({ socket }) => {
       style={{
         margin: "0 auto",
         border: "2px solid #fff",
-        width: "800px",
-        height: "600px",
+        width: "100%",
+        height: "100vh",
       }}
     />
   );
