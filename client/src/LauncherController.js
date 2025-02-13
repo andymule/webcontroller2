@@ -1,4 +1,3 @@
-// client/src/LauncherController.js
 import React from "react";
 
 const LauncherController = ({ socket }) => {

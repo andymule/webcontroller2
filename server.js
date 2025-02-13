@@ -1,4 +1,3 @@
-// server.js
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
@@ -7,6 +6,18 @@ const { Server } = require("socket.io");
 
 const app = express();
 const port = process.env.PORT || 50000;
+
+// Middleware to set HTTP headers to prevent caching
+app.use((req, res, next) => {
+  res.setHeader(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate"
+  );
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  res.setHeader("Surrogate-Control", "no-store");
+  next();
+});
 
 app.use(cors({ origin: true, credentials: true }));
 
@@ -42,10 +53,16 @@ io.on("connection", (socket) => {
     io.emit("changeColor", color);
   });
 
-  // Updated: Broadcast launcherUpdate events so the game receives them.
+  // Broadcast launcherUpdate events so the game receives them.
   socket.on("launcherUpdate", (data) => {
     console.log("SERVER: Received launcherUpdate from", socket.id, ":", data);
     io.emit("launcherUpdate", data);
+  });
+
+  // New: Handle shoot events.
+  socket.on("shoot", (data) => {
+    console.log("SERVER: Received shoot from", socket.id, ":", data);
+    io.emit("shoot", data);
   });
 
   socket.on("debug", (msg) => {

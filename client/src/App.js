@@ -1,8 +1,8 @@
-// client/src/App.js
+// App.js
 import React, { useEffect, useState } from "react";
 import { io } from "socket.io-client";
-import GameCanvas from "./GameCanvas"; // Desktop: Phaser game
-import LauncherController from "./LauncherController"; // Mobile: Launcher controller with impulse button
+import GameCanvas from "./GameCanvas"; // Desktop game
+import PhaserMobileController from "./PhaserMobileController"; // Mobile controller
 
 const App = () => {
   const [isMobile, setIsMobile] = useState(false);
@@ -21,16 +21,14 @@ const App = () => {
       console.log("Socket connected:", newSocket.id);
     });
 
-    return () => {
-      newSocket.disconnect();
-    };
+    return () => newSocket.disconnect();
   }, []);
 
   return (
-    <div style={{ textAlign: "center", marginTop: "2rem" }}>
+    <div style={{ textAlign: "center"}}>
       <h1>{isMobile ? "Mobile Controller" : "Desktop Display"}</h1>
       {isMobile ? (
-        <LauncherController socket={socket} />
+        <PhaserMobileController socket={socket} />
       ) : (
         <GameCanvas socket={socket} />
       )}
