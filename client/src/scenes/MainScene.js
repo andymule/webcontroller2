@@ -1,5 +1,8 @@
-// src/scenes/MainScene.js
 import Phaser from "phaser";
+import Ship from "../entities/Ship";
+import Bullet from "../entities/Bullet";
+import Enemy from "../entities/Enemy";
+import { emitCollisionParticles } from "../effects/ParticleEffects";
 
 export default class MainScene extends Phaser.Scene {
   constructor() {
@@ -8,42 +11,15 @@ export default class MainScene extends Phaser.Scene {
   init(data) {
     console.log("MainScene: init called with data:", data);
     this.socket = data.socket;
+    this.players = {};
   }
   preload() {
-    // Create a triangular ship texture.
-    const shipGraphics = this.make.graphics({ x: 0, y: 0, add: false });
-    shipGraphics.fillStyle(0x00ff00, 1);
-    shipGraphics.beginPath();
-    shipGraphics.moveTo(30, 0);
-    shipGraphics.lineTo(0, 20);
-    shipGraphics.lineTo(0, -20);
-    shipGraphics.closePath();
-    shipGraphics.fillPath();
-    shipGraphics.generateTexture("ship", 30, 40);
-
-    // Create a bullet texture (a small white circle).
-    const bulletGraphics = this.make.graphics({ x: 0, y: 0, add: false });
-    bulletGraphics.fillStyle(0xffffff, 1);
-    bulletGraphics.fillCircle(5, 5, 5);
-    bulletGraphics.generateTexture("bullet", 10, 10);
-
-    // Create an enemy texture (a red circle).
-    const enemyGraphics = this.make.graphics({ x: 0, y: 0, add: false });
-    enemyGraphics.fillStyle(0xff0000, 1);
-    enemyGraphics.fillCircle(15, 15, 15);
-    enemyGraphics.generateTexture("enemy", 30, 30);
+    // No need to include the graphics calls here since each entity handles its own texture.
   }
   create() {
     console.log("MainScene: create called");
-
-    // Create groups for bullets and enemies.
     this.bullets = this.physics.add.group();
     this.enemies = this.physics.add.group();
-
-    // Dictionary to track players (keyed by socket id).
-    this.players = {};
-
-    // Set world bounds.
     this.physics.world.setBounds(0, 0, this.scale.width, this.scale.height);
 
     // Optional border for visualization.
@@ -53,21 +29,16 @@ export default class MainScene extends Phaser.Scene {
 
     // --- Socket Event Listeners ---
     this.socket.on("launcherUpdate", (data) => {
-      // Data includes { id, dx, dy }
       if (!this.players[data.id]) {
-        const ship = this.physics.add.image(
+        const ship = new Ship(
+          this,
           this.scale.width / 2,
-          this.scale.height / 2,
-          "ship"
+          this.scale.height / 2
         );
-        ship.setCollideWorldBounds(true);
-        ship.setDamping(true);
-        ship.setDrag(0.9);
-        ship.setMaxVelocity(300);
         this.players[data.id] = ship;
-
-        this.physics.add.overlap(ship, this.enemies, (ship, enemy) => {
-          ship.destroy();
+        this.physics.add.overlap(ship, this.enemies, (shipObj, enemy) => {
+          emitCollisionParticles(this, shipObj.x, shipObj.y);
+          shipObj.destroy();
           delete this.players[data.id];
           console.log(`MainScene: Player ${data.id} was destroyed by an enemy`);
         });
@@ -98,6 +69,7 @@ export default class MainScene extends Phaser.Scene {
     this.physics.add.overlap(this.bullets, this.enemies, (bullet, enemy) => {
       bullet.destroy();
       enemy.destroy();
+      emitCollisionParticles(this, enemy.x, enemy.y);
       console.log("MainScene: Enemy hit by bullet");
     });
 
@@ -114,32 +86,35 @@ export default class MainScene extends Phaser.Scene {
       loop: true,
     });
 
-    // Apply the custom glow pipeline to the main camera.
     this.cameras.main.setPostPipeline("GlowPipeline");
   }
   update() {
-    // Additional game logic can be added here.
+    // Let Bullet objects update themselves (if using the class that overrides preUpdate)
   }
   shootBullet(shooter, data) {
     const bulletSpeed = 400;
     let magnitude = Math.sqrt(data.dx * data.dx + data.dy * data.dy);
+    // Fallback to shoot in the direction the shooter is facing.
     if (magnitude < 0.001) {
-      data.dx = Math.cos(shooter.rotation);
-      data.dy = Math.sin(shooter.rotation);
+      const rot = shooter.rotation || 0;
+      data.dx = Math.cos(rot);
+      data.dy = Math.sin(rot);
       magnitude = 1;
     }
     const normX = data.dx / magnitude;
     const normY = data.dy / magnitude;
-    const bullet = this.physics.add.image(shooter.x, shooter.y, "bullet");
-    this.bullets.add(bullet);
-    bullet.setCollideWorldBounds(true);
-    bullet.body.onWorldBounds = true;
-    bullet.setVelocity(normX * bulletSpeed, normY * bulletSpeed);
     console.log(
       "MainScene: Bullet shot with velocity:",
       normX * bulletSpeed,
       normY * bulletSpeed
     );
+    // Create bullet using physics.add.image (this worked in your original refactor)
+    const bullet = this.physics.add.image(shooter.x, shooter.y, "bullet");
+    bullet.setOrigin(0.5, 0.5);
+    bullet.setCollideWorldBounds(true);
+    bullet.body.onWorldBounds = true;
+    bullet.setVelocity(normX * bulletSpeed, normY * bulletSpeed);
+    this.bullets.add(bullet);
     this.time.addEvent({
       delay: 10000,
       callback: () => {
@@ -147,6 +122,7 @@ export default class MainScene extends Phaser.Scene {
       },
     });
   }
+
   spawnEnemy() {
     const side = Phaser.Math.Between(0, 3);
     let x, y;
@@ -163,8 +139,7 @@ export default class MainScene extends Phaser.Scene {
       x = 0;
       y = Phaser.Math.Between(0, this.scale.height);
     }
-    const enemy = this.physics.add.image(x, y, "enemy");
-    enemy.setCollideWorldBounds(true);
+    const enemy = new Enemy(this, x, y);
     this.enemies.add(enemy);
     let nearest = null;
     let minDist = Infinity;
