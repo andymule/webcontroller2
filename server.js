@@ -43,6 +43,19 @@ const io = new Server(server, {
 io.on("connection", (socket) => {
   console.log("SERVER: New client connected:", socket.id);
 
+  // Relay launcherUpdate events with sender's socket id.
+  socket.on("launcherUpdate", (data) => {
+    console.log("SERVER: Received launcherUpdate from", socket.id, ":", data);
+    // Attach sender's id.
+    io.emit("launcherUpdate", { id: socket.id, ...data });
+  });
+
+  // Relay shoot events with sender's socket id.
+  socket.on("shoot", (data) => {
+    console.log("SERVER: Received shoot from", socket.id, ":", data);
+    io.emit("shoot", { id: socket.id, ...data });
+  });
+
   socket.on("launch", (drag) => {
     console.log("SERVER: Received launch from", socket.id, ":", drag);
     io.emit("launch", drag);
@@ -53,24 +66,14 @@ io.on("connection", (socket) => {
     io.emit("changeColor", color);
   });
 
-  // Broadcast launcherUpdate events so the game receives them.
-  socket.on("launcherUpdate", (data) => {
-    console.log("SERVER: Received launcherUpdate from", socket.id, ":", data);
-    io.emit("launcherUpdate", data);
-  });
-
-  // New: Handle shoot events.
-  socket.on("shoot", (data) => {
-    console.log("SERVER: Received shoot from", socket.id, ":", data);
-    io.emit("shoot", data);
-  });
-
   socket.on("debug", (msg) => {
     console.log(`SERVER DEBUG from ${socket.id}: ${msg}`);
   });
 
   socket.on("disconnect", () => {
     console.log("SERVER: Client disconnected:", socket.id);
+    // Notify all clients that this player disconnected.
+    io.emit("playerDisconnected", socket.id);
   });
 });
 

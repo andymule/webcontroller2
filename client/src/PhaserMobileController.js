@@ -23,6 +23,10 @@ const PhaserMobileController = ({ socket }) => {
       constructor() {
         super("ControllerScene");
         console.log("[DEBUG] ControllerScene constructor called.");
+        this.lastShootDirection = { dx: 1, dy: 0 }; // default to firing right
+        // Added pointer id tracking for each side.
+        this.leftPointerId = null;
+        this.rightPointerId = null;
       }
       preload() {
         console.log("[DEBUG] ControllerScene preload called.");
@@ -32,13 +36,23 @@ const PhaserMobileController = ({ socket }) => {
         const { width, height } = this.sys.game.config;
         console.log("[DEBUG] Game config:", { width, height });
 
+        // --- Reposition Analog Sticks to Bottom Third ---
+        // Instead of centering vertically (height/2), we center in the bottom 1/3.
+        // For example, using the center of the bottom third:
+        const centerY = height * (5 / 6); // roughly center in bottom 1/3
+
         // Draw background halves.
         this.leftGraphics = this.add.graphics();
         this.leftGraphics.fillStyle(0xffcccc, 1);
-        this.leftGraphics.fillRect(0, 0, width / 2, height);
+        this.leftGraphics.fillRect(0, height * (2 / 3), width / 2, height / 3);
         this.rightGraphics = this.add.graphics();
         this.rightGraphics.fillStyle(0xccccff, 1);
-        this.rightGraphics.fillRect(width / 2, 0, width / 2, height);
+        this.rightGraphics.fillRect(
+          width / 2,
+          height * (2 / 3),
+          width / 2,
+          height / 3
+        );
 
         // Settings for analog sticks.
         const stickRadius = 50;
@@ -50,10 +64,10 @@ const PhaserMobileController = ({ socket }) => {
           maxDistance,
         });
 
-        // ---------- LEFT ANALOG STICK ----------
+        // ---------- LEFT ANALOG STICK (for movement) ----------
         this.leftBase = this.add.circle(
           width / 4,
-          height / 2,
+          centerY, // moved to bottom third
           stickRadius,
           0x888888,
           0.5
@@ -64,13 +78,12 @@ const PhaserMobileController = ({ socket }) => {
           knobRadius,
           0xffffff
         );
-        // Disable knob's own interactive behavior so events come from the full left half.
         this.leftKnob.disableInteractive();
 
-        // ---------- RIGHT ANALOG STICK ----------
+        // ---------- RIGHT ANALOG STICK (for shooting) ----------
         this.rightBase = this.add.circle(
           (width * 3) / 4,
-          height / 2,
+          centerY, // moved to bottom third
           stickRadius,
           0x888888,
           0.5
@@ -83,7 +96,10 @@ const PhaserMobileController = ({ socket }) => {
         );
         this.rightKnob.disableInteractive();
 
-        // Helper functions for updating and resetting the knobs.
+        // Rapid-fire timer for auto-shooting.
+        this.shootingTimer = null;
+
+        // Helper functions.
         const updateLeftKnob = (pointer) => {
           const pos = { x: pointer.x, y: pointer.y };
           let dx = pos.x - this.leftBase.x;
@@ -98,15 +114,20 @@ const PhaserMobileController = ({ socket }) => {
           const normX = dx / maxDistance;
           const normY = dy / maxDistance;
           if (socket) {
-            socket.emit("launcherUpdate", { dx: normX, dy: normY });
+            socket.emit("launcherUpdate", {
+              id: socket.id,
+              dx: normX,
+              dy: normY,
+            });
           }
         };
 
         const resetLeftKnob = () => {
           this.leftKnob.setPosition(this.leftBase.x, this.leftBase.y);
           if (socket) {
-            socket.emit("launcherUpdate", { dx: 0, dy: 0 });
+            socket.emit("launcherUpdate", { id: socket.id, dx: 0, dy: 0 });
           }
+          this.leftPointerId = null; // clear pointer id when released
         };
 
         const updateRightKnob = (pointer) => {
@@ -123,80 +144,122 @@ const PhaserMobileController = ({ socket }) => {
             this.rightBase.x + dx,
             this.rightBase.y + dy
           );
+          // Calculate normalized direction.
+          const norm = { dx: dx / maxDistance, dy: dy / maxDistance };
+          // If the displacement is significant, store this as the last shoot direction.
+          if (Math.abs(norm.dx) > 0.1 || Math.abs(norm.dy) > 0.1) {
+            this.lastShootDirection = norm;
+          }
+          return this.lastShootDirection;
         };
 
         const resetRightKnob = () => {
           this.rightKnob.setPosition(this.rightBase.x, this.rightBase.y);
+          this.rightPointerId = null; // clear pointer id when released
         };
 
         // ---------- Interactive Background Areas ----------
-        // Create invisible interactive rectangles covering each half.
+        // Limit interactive zones to the bottom third.
+        // Left area for movement.
         this.leftArea = this.add.rectangle(
           width / 4,
-          height / 2,
+          centerY,
           width / 2,
-          height,
+          height / 3,
           0x000000,
           0
         );
         this.leftArea.setInteractive();
-        this.leftActive = false;
         this.leftArea.on("pointerdown", (pointer) => {
-          this.leftActive = true;
-          updateLeftKnob(pointer);
-        });
-        this.leftArea.on("pointermove", (pointer) => {
-          if (this.leftActive) {
+          // Only start tracking if not already tracking another pointer
+          if (this.leftPointerId === null) {
+            this.leftPointerId = pointer.id;
             updateLeftKnob(pointer);
           }
         });
-        this.leftArea.on("pointerup", () => {
-          this.leftActive = false;
-          resetLeftKnob();
+        this.leftArea.on("pointermove", (pointer) => {
+          // Only update if this pointer is the one we started with
+          if (pointer.id === this.leftPointerId) {
+            updateLeftKnob(pointer);
+          }
         });
-        this.leftArea.on("pointerupoutside", () => {
-          this.leftActive = false;
-          resetLeftKnob();
+        this.leftArea.on("pointerup", (pointer) => {
+          if (pointer.id === this.leftPointerId) {
+            resetLeftKnob();
+          }
+        });
+        this.leftArea.on("pointerupoutside", (pointer) => {
+          if (pointer.id === this.leftPointerId) {
+            resetLeftKnob();
+          }
         });
 
+        // Right area for shooting.
         this.rightArea = this.add.rectangle(
           (width * 3) / 4,
-          height / 2,
+          centerY,
           width / 2,
-          height,
+          height / 3,
           0x000000,
           0
         );
         this.rightArea.setInteractive();
-        this.rightActive = false;
         this.rightArea.on("pointerdown", (pointer) => {
-          this.rightActive = true;
-          updateRightKnob(pointer);
+          // Only start tracking if not already tracking a pointer for shooting.
+          if (this.rightPointerId === null) {
+            this.rightPointerId = pointer.id;
+            // Fire one shot immediately.
+            const { dx, dy } = updateRightKnob(pointer);
+            if (socket) {
+              socket.emit("shoot", { id: socket.id, dx, dy });
+            }
+            // Start auto-fire timer every 200ms.
+            if (!this.shootingTimer) {
+              this.shootingTimer = this.time.addEvent({
+                delay: 200,
+                loop: true,
+                callback: () => {
+                  // Use the stored pointer for shooting if still active.
+                  const pointer =
+                    this.input.pointer1.id === this.rightPointerId
+                      ? this.input.pointer1
+                      : this.input.pointer2; // adjust if you expect more pointers
+                  if (pointer && pointer.isDown) {
+                    const { dx, dy } = updateRightKnob(pointer);
+                    if (socket) {
+                      socket.emit("shoot", { id: socket.id, dx, dy });
+                    }
+                  }
+                },
+              });
+            }
+          }
         });
         this.rightArea.on("pointermove", (pointer) => {
-          if (this.rightActive) {
+          if (pointer.id === this.rightPointerId) {
             updateRightKnob(pointer);
           }
         });
-        this.rightArea.on("pointerup", () => {
-          this.rightActive = false;
-          // Calculate final displacement for shooting.
-          const dx = this.rightKnob.x - this.rightBase.x;
-          const dy = this.rightKnob.y - this.rightBase.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
-          if (distance > 5 && socket) {
-            const normX = dx / maxDistance;
-            const normY = dy / maxDistance;
-            socket.emit("shoot", { dx: normX, dy: normY });
+        this.rightArea.on("pointerup", (pointer) => {
+          if (pointer.id === this.rightPointerId) {
+            if (this.shootingTimer) {
+              this.shootingTimer.remove();
+              this.shootingTimer = null;
+            }
+            resetRightKnob();
           }
-          resetRightKnob();
         });
-        this.rightArea.on("pointerupoutside", () => {
-          this.rightActive = false;
-          resetRightKnob();
+        this.rightArea.on("pointerupoutside", (pointer) => {
+          if (pointer.id === this.rightPointerId) {
+            if (this.shootingTimer) {
+              this.shootingTimer.remove();
+              this.shootingTimer = null;
+            }
+            resetRightKnob();
+          }
         });
 
-        // Bring the knob graphics to the top.
+        // Bring the knobs to the top.
         this.children.bringToTop(this.leftKnob);
         this.children.bringToTop(this.rightKnob);
 
@@ -204,30 +267,37 @@ const PhaserMobileController = ({ socket }) => {
         this.input.addPointer(2);
         console.log("[DEBUG] Additional pointers added for multitouch.");
 
-        // Listen for Phaser's resize event and update UI positions.
+        // Listen for resize events.
         this.scale.on("resize", (gameSize) => {
           const newWidth = gameSize.width;
           const newHeight = gameSize.height;
-          // Update base positions.
-          this.leftBase.setPosition(newWidth / 4, newHeight / 2);
-          this.rightBase.setPosition((newWidth * 3) / 4, newHeight / 2);
-          // Reset knob positions.
-          this.leftKnob.setPosition(newWidth / 4, newHeight / 2);
-          this.rightKnob.setPosition((newWidth * 3) / 4, newHeight / 2);
-          // Update interactive areas.
-          this.leftArea.setPosition(newWidth / 4, newHeight / 2);
+          const newCenterY = newHeight * (5 / 6);
+          this.leftBase.setPosition(newWidth / 4, newCenterY);
+          this.rightBase.setPosition((newWidth * 3) / 4, newCenterY);
+          this.leftKnob.setPosition(newWidth / 4, newCenterY);
+          this.rightKnob.setPosition((newWidth * 3) / 4, newCenterY);
+          this.leftArea.setPosition(newWidth / 4, newCenterY);
           this.leftArea.width = newWidth / 2;
-          this.leftArea.height = newHeight;
-          this.rightArea.setPosition((newWidth * 3) / 4, newHeight / 2);
+          this.leftArea.height = newHeight / 3;
+          this.rightArea.setPosition((newWidth * 3) / 4, newCenterY);
           this.rightArea.width = newWidth / 2;
-          this.rightArea.height = newHeight;
-          // Redraw background halves.
+          this.rightArea.height = newHeight / 3;
           this.leftGraphics.clear();
           this.leftGraphics.fillStyle(0xffcccc, 1);
-          this.leftGraphics.fillRect(0, 0, newWidth / 2, newHeight);
+          this.leftGraphics.fillRect(
+            0,
+            newHeight * (2 / 3),
+            newWidth / 2,
+            newHeight / 3
+          );
           this.rightGraphics.clear();
           this.rightGraphics.fillStyle(0xccccff, 1);
-          this.rightGraphics.fillRect(newWidth / 2, 0, newWidth / 2, newHeight);
+          this.rightGraphics.fillRect(
+            newWidth / 2,
+            newHeight * (2 / 3),
+            newWidth / 2,
+            newHeight / 3
+          );
         });
       }
     }
@@ -250,7 +320,7 @@ const PhaserMobileController = ({ socket }) => {
     gameRef.current = game;
     console.log("[DEBUG] Phaser Game instance created:", game);
 
-    // Listen for window resize and orientation change events.
+    // Listen for window resize and orientation change.
     const resizeListener = () => {
       if (gameRef.current && gameRef.current.scale) {
         const newWidth = document.documentElement.clientWidth;
